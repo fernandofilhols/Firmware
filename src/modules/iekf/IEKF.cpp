@@ -38,25 +38,26 @@ float condMaxDefault = 1e3;
 float betaMaxDefault = 1e21;
 
 IEKF::IEKF() :
-	SuperBlock(NULL, "IEKF"),
-	_nh(), // node handlke
+	//SuperBlock(NULL, "IEKF"),
+	_nh(), // node handle
 	// blocks
+	//_aglLP(this, "POS_LP"),
 	//_baroLP(this, "BARO_LP"),
 	//_accelLP(this, "ACCEL_LP"),
 	//_magLP(this, "MAG_LP"),
-	// sensors
-	_sensorAccel("accel", betaMaxDefault, condMaxDefault, 20),
-	_sensorMag("mag", betaMaxDefault, condMaxDefault, 20),
-	_sensorBaro("baro", betaMaxDefault, condMaxDefault, 20),
+	// sensors, rates set in updateParam, default to 0
+	_sensorAccel("accel", betaMaxDefault, condMaxDefault, 0),
+	_sensorMag("mag", betaMaxDefault, condMaxDefault, 0),
+	_sensorBaro("baro", betaMaxDefault, condMaxDefault, 0),
 	// turning these off for now
-	_sensorGps("gps", betaMaxDefault, condMaxDefault, 20),
-	_sensorAirspeed("airspeed", betaMaxDefault, condMaxDefault, 20),
-	_sensorFlow("flow", betaMaxDefault, condMaxDefault, 20),
-	_sensorSonar("sonar", betaMaxDefault, condMaxDefault, 20),
-	_sensorLidar("lidar", betaMaxDefault, condMaxDefault, 20),
-	_sensorVision("vision", betaMaxDefault, condMaxDefault, 20),
-	_sensorMocap("mocap", betaMaxDefault, condMaxDefault, 20),
-	_sensorLand("land_detected", betaMaxDefault, condMaxDefault, 20),
+	_sensorGps("gps", betaMaxDefault, condMaxDefault, 0),
+	_sensorAirspeed("airspeed", betaMaxDefault, condMaxDefault, 0),
+	_sensorFlow("flow", betaMaxDefault, condMaxDefault, 0),
+	_sensorSonar("sonar", betaMaxDefault, condMaxDefault, 0),
+	_sensorLidar("lidar", betaMaxDefault, condMaxDefault, 0),
+	_sensorVision("vision", betaMaxDefault, condMaxDefault, 0),
+	_sensorMocap("mocap", betaMaxDefault, condMaxDefault, 0),
+	_sensorLand("land_detected", betaMaxDefault, condMaxDefault, 0),
 	// subscriptions
 	_subImu(_nh.subscribe("sensor_combined", 0, &IEKF::callbackImu, this, 1000 / 1000)),
 	_subGps(_nh.subscribe("vehicle_gps_position", 0, &IEKF::correctGps, this, 1000 / 10)),
@@ -132,6 +133,7 @@ IEKF::IEKF() :
 	_pn_vz_nd(0),
 	_pn_rot_nd(0),
 	_pn_t_asl_nd(0)
+
 {
 	// for quaterinons we bound at 2
 	// so it has a chance to
@@ -146,14 +148,14 @@ IEKF::IEKF() :
 	_xMin(X::gyro_bias_bX) = -0.1;
 	_xMin(X::gyro_bias_bY) = -0.1;
 	_xMin(X::gyro_bias_bZ) = -0.1;
-	_xMin(X::accel_bias_bX) = -0.1;
-	_xMin(X::accel_bias_bY) = -0.1;
-	_xMin(X::accel_bias_bZ) = -0.1;
+	_xMin(X::accel_bias_bX) = -0.5;
+	_xMin(X::accel_bias_bY) = -0.5;
+	_xMin(X::accel_bias_bZ) = -0.5;
 	_xMin(X::pos_N) = -1e30;
 	_xMin(X::pos_E) = -1e30;
 	_xMin(X::asl) = -1e30;
 	_xMin(X::terrain_asl) = -1e30;
-	_xMin(X::baro_bias) = -1e30;
+	_xMin(X::baro_bias) = -100;
 	//_xMin(X::wind_N) = -100;
 	//_xMin(X::wind_E) = -100;
 	//_xMin(X::wind_D) = -100;
@@ -168,14 +170,14 @@ IEKF::IEKF() :
 	_xMax(X::gyro_bias_bX) = 0.1;
 	_xMax(X::gyro_bias_bY) = 0.1;
 	_xMax(X::gyro_bias_bZ) = 0.1;
-	_xMax(X::accel_bias_bX) = 0.1;
-	_xMax(X::accel_bias_bY) = 0.1;
-	_xMax(X::accel_bias_bZ) = 0.1;
+	_xMax(X::accel_bias_bX) = 0.5;
+	_xMax(X::accel_bias_bY) = 0.5;
+	_xMax(X::accel_bias_bZ) = 0.5;
 	_xMax(X::pos_N) = 1e30;
 	_xMax(X::pos_E) = 1e30;
 	_xMax(X::asl) = 1e30;
 	_xMax(X::terrain_asl) = 1e30;
-	_xMax(X::baro_bias) = 1e30;
+	_xMax(X::baro_bias) = 100;
 	//_xMax(X::wind_N) = 100;
 	//_xMax(X::wind_E) = 100;
 	//_xMax(X::wind_D) = 100;
@@ -319,10 +321,6 @@ void IEKF::callbackImu(const sensor_combined_s *msg)
 	_u(U::accel_bY) = accel_b(1);
 	_u(U::accel_bZ) = accel_b(2);
 
-	//_accelLP.update(accel_b);
-	//_magLP.update(mag_b);
-	//_baroLP.update(msg->baro_alt_meter);
-
 	// update gyro saturation
 	if (gyro_b.norm() > gyro_saturation_thresh) {
 		_gyroSaturated = true;
@@ -347,26 +345,20 @@ void IEKF::callbackImu(const sensor_combined_s *msg)
 
 		predictState(msg);
 
-		// set correciton deadline to 250 hz
-
-		// max update rate of innert loops, 10 hz
-		int lowRateCount = 25;
-
-		// check if sensors are ready using row late cycle
-		if (_imuLowRateIndex % lowRateCount == 0) {
+		if (_imuLowRateIndex % 25 == 0) {
+			// 10 hz scheduling
 			predictCovariance(msg);
 
-		} else if (_imuLowRateIndex % lowRateCount == 1) {
-			correctAccel(msg);
+		} else {
+			// ~100 hz scheduling
+			if (_imuLowRateIndex % 2 == 0) {
+				correctLand(msg->timestamp);
+				correctAccel(msg);
 
-		} else if (_imuLowRateIndex % lowRateCount == 2) {
-			correctMag(msg);
-
-		} else if (_imuLowRateIndex % lowRateCount == 3) {
-			correctBaro(msg);
-
-		} else if (_imuLowRateIndex % lowRateCount == 4) {
-			correctLand(msg->timestamp);
+			} else {
+				correctMag(msg);
+				correctBaro(msg);
+			}
 		}
 
 		float overrunMillis = int32_t(ros::Time::now().toNSec() - deadline) / 1.0e6f;
@@ -386,7 +378,7 @@ void IEKF::callbackImu(const sensor_combined_s *msg)
 void IEKF::updateParams()
 {
 	// update all block params
-	SuperBlock::updateParams();
+	//SuperBlock::updateParams();
 
 	// update ros params
 	_nh.getParam("IEKF_GYRO_ND", _gyro_nd);
@@ -427,6 +419,19 @@ void IEKF::updateParams()
 	_nh.getParam("IEKF_PN_VZ_ND", _pn_vz_nd);
 	_nh.getParam("IEKF_PN_ROT_ND", _pn_rot_nd);
 	_nh.getParam("IEKF_PN_T_ASL_ND", _pn_t_asl_nd);
+
+
+	_nh.getParam("IEKF_RATE_ACCEL", _sensorAccel.getRateMax());
+	_nh.getParam("IEKF_RATE_MAG", _sensorMag.getRateMax());
+	_nh.getParam("IEKF_RATE_BARO", _sensorBaro.getRateMax());
+	_nh.getParam("IEKF_RATE_GPS", _sensorGps.getRateMax());
+	_nh.getParam("IEKF_RATE_AIRSPD", _sensorAirspeed.getRateMax());
+	_nh.getParam("IEKF_RATE_FLOW", _sensorFlow.getRateMax());
+	_nh.getParam("IEKF_RATE_SONAR", _sensorSonar.getRateMax());
+	_nh.getParam("IEKF_RATE_LIDAR", _sensorLidar.getRateMax());
+	_nh.getParam("IEKF_RATE_VISION", _sensorVision.getRateMax());
+	_nh.getParam("IEKF_RATE_MOCAP", _sensorMocap.getRateMax());
+	_nh.getParam("IEKF_RATE_LAND", _sensorLand.getRateMax());
 }
 
 void IEKF::callbackParamUpdate(const parameter_update_s *msg)
@@ -636,7 +641,8 @@ void IEKF::predictCovariance(const sensor_combined_s *msg)
 				   _pn_vxy_nd * _pn_vxy_nd;
 		float vel_var_z = _accel_nd * _accel_nd + \
 				  _pn_vz_nd * _pn_vz_nd;
-		float terrain_var_asl = _pn_t_asl_nd * _pn_t_asl_nd;
+		float groundSpeedSq = getGroundVelocity().dot(getGroundVelocity());
+		float terrain_var_asl = _pn_t_asl_nd * _pn_t_asl_nd * groundSpeedSq;
 
 		// account for gyro saturation
 		if (getGyroSaturated()) {
@@ -757,29 +763,36 @@ void IEKF::correctionLogic(Vector<float, X::n> &dx) const
 {
 
 	if (getLanded()) {
+		//ROS_INFO("not updating position, landed, agl: %10.4f, landed: %d",
+		//	double(getAgl()), _landed);
 		dx(X::pos_N) = 0;
 		dx(X::pos_E) = 0;
 	}
 
 	if (!getPositionXYValid()) {
+		//ROS_INFO("not updating position, xy not valid");
 		dx(X::pos_N) = 0;
 		dx(X::pos_E) = 0;
 	}
 
 	if (!getAltitudeValid()) {
+		//ROS_INFO("not updating position, altitude not valid");
 		dx(X::asl) = 0;
 	}
 
 	if (!getVelocityXYValid()) {
+		//ROS_INFO("not updating velocity xy, not valid");
 		dx(X::vel_N) = 0;
 		dx(X::vel_E) = 0;
 	}
 
 	if (!getVelocityZValid()) {
+		//ROS_INFO("not updating velocity z, not valid");
 		dx(X::vel_D) = 0;
 	}
 
 	if (!getTerrainValid()) {
+		//ROS_INFO("not updating terrain asl, not valid");
 		dx(X::terrain_asl) = 0;
 	}
 
@@ -793,6 +806,7 @@ void IEKF::correctionLogic(Vector<float, X::n> &dx) const
 				     _u(U::accel_bZ)).norm() > 1.2f * g;
 
 	if (rotating || accelerating) {
+		//ROS_INFO("not updating bias, rotating or accelerating");
 		dx(X::gyro_bias_bX) = 0;
 		dx(X::gyro_bias_bY) = 0;
 		dx(X::gyro_bias_bZ) = 0;

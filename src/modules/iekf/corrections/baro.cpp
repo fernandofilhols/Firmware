@@ -79,7 +79,9 @@ void IEKF::correctBaro(const sensor_combined_s *msg)
 
 	// define R
 	SquareMatrix<float, Y_baro::n> R;
-	R(Y_baro::asl, Y_baro::asl) = _baro_nd * _baro_nd / dt;
+	float dt_baro_sample = 0.01;
+	R(Y_baro::asl, Y_baro::asl) = _baro_nd * _baro_nd / dt_baro_sample;
+	//ROS_INFO("baro dt: %10.4f, variance: %10.4f", double(dt), double(sqrtf(R(0, 0))));
 
 	// define H
 	Matrix<float, Y_baro::n, Xe::n> H;
@@ -95,6 +97,13 @@ void IEKF::correctBaro(const sensor_combined_s *msg)
 	_innovStd(Innov::BARO_asl) = sqrtf(S(0, 0));
 
 	if (_sensorBaro.shouldCorrect()) {
+		nullAttitudeCorrection(_dxe);
+		// don't allow position correction in north/ east
+		_dxe(Xe::pos_N) = 0;
+		_dxe(Xe::pos_E) = 0;
+		_dxe(Xe::vel_N) = 0;
+		_dxe(Xe::vel_E) = 0;
+
 		Vector<float, X::n> dx = computeErrorCorrection(_dxe);
 		incrementX(dx);
 		incrementP(_dP);
