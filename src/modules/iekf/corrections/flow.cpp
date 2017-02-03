@@ -200,7 +200,7 @@ void IEKF::correctFlow(const optical_flow_s *msg)
 	_innovStd(Innov::FLOW_flow_Y) = sqrtf(S(1, 1));
 
 	if (_sensorFlow.shouldCorrect()) {
-		ROS_INFO("correct flow");
+		//ROS_INFO("correct flow");
 		// don't allow attitude correction
 		nullAttitudeCorrection(_dxe);
 		Vector<float, X::n> dx = computeErrorCorrection(_dxe);
