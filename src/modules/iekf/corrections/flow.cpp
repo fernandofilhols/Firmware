@@ -54,7 +54,6 @@ void IEKF::correctFlow(const optical_flow_s *msg)
 		return;
 	}
 
-	ROS_INFO("correct flow");
 	// compute agl
 	float agl = getAgl();
 
