@@ -279,7 +279,7 @@ PARAM_DEFINE_FLOAT(IEKF_SONAR_ND, 1e-2f);
  * @max 1e0
  * @decimal 5
  */
-PARAM_DEFINE_FLOAT(IEKF_LAND_VXY_ND, 1e-1f);
+PARAM_DEFINE_FLOAT(IEKF_LAND_VXY_ND, 1e-2f);
 
 /**
  * Land velocity z noise density
@@ -290,7 +290,7 @@ PARAM_DEFINE_FLOAT(IEKF_LAND_VXY_ND, 1e-1f);
  * @max 1e0
  * @decimal 5
  */
-PARAM_DEFINE_FLOAT(IEKF_LAND_VZ_ND, 1e-1f);
+PARAM_DEFINE_FLOAT(IEKF_LAND_VZ_ND, 1e-2f);
 
 /**
  * Land agl noise density
@@ -301,7 +301,7 @@ PARAM_DEFINE_FLOAT(IEKF_LAND_VZ_ND, 1e-1f);
  * @max 1e0
  * @decimal 5
  */
-PARAM_DEFINE_FLOAT(IEKF_LAND_AGL_ND, 1e-1f);
+PARAM_DEFINE_FLOAT(IEKF_LAND_AGL_ND, 1e-2f);
 
 /*================================================================*/
 /* Process Noise */
